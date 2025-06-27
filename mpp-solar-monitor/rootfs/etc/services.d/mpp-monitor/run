@@ -1,0 +1,59 @@
+#!/usr/bin/with-contenv bashio
+# ==============================================================================
+# Home Assistant Community Add-on: MPP Solar Monitor
+# Runs the MPP Solar Monitor
+# ==============================================================================
+
+bashio::log.info "Starting MPP Solar Monitor..."
+
+# Get configuration
+device_path=$(bashio::config 'device_path')
+protocol=$(bashio::config 'protocol')
+baud_rate=$(bashio::config 'baud_rate')
+mqtt_host=$(bashio::config 'mqtt_host')
+mqtt_port=$(bashio::config 'mqtt_port')
+mqtt_username=$(bashio::config 'mqtt_username')
+mqtt_password=$(bashio::config 'mqtt_password')
+device_name=$(bashio::config 'device_name')
+scan_interval=$(bashio::config 'scan_interval')
+debug=$(bashio::config 'debug')
+
+bashio::log.info "Device: ${device_path}"
+bashio::log.info "Protocol: ${protocol}"
+bashio::log.info "MQTT: ${mqtt_host}:${mqtt_port}"
+
+# Check if device exists
+if [[ ! -e "${device_path}" ]]; then
+    bashio::log.error "Device ${device_path} not found!"
+    bashio::log.info "Available devices:"
+    ls -la /dev/hidraw* /dev/ttyUSB* /dev/ttyACM* 2>/dev/null || bashio::log.info "No devices found"
+    bashio::log.info "Please check your device configuration"
+    exit 1
+fi
+
+# Set device permissions
+chmod 666 "${device_path}" 2>/dev/null || bashio::log.warning "Could not set device permissions"
+
+# Test communication
+bashio::log.info "Testing communication with inverter..."
+if timeout 10 mpp-solar -p "${device_path}" -P "${protocol}" -c QID >/dev/null 2>&1; then
+    bashio::log.info "✅ Communication test successful"
+else
+    bashio::log.warning "⚠️ Communication test failed, but continuing..."
+    bashio::log.info "You may need to adjust the protocol or device path"
+fi
+
+# Export configuration as environment variables
+export DEVICE_PATH="${device_path}"
+export PROTOCOL="${protocol}"
+export BAUD_RATE="${baud_rate}"
+export MQTT_HOST="${mqtt_host}"
+export MQTT_PORT="${mqtt_port}"
+export MQTT_USERNAME="${mqtt_username}"
+export MQTT_PASSWORD="${mqtt_password}"
+export DEVICE_NAME="${device_name}"
+export SCAN_INTERVAL="${scan_interval}"
+export DEBUG="${debug}"
+
+# Start the Python monitor
+exec python3 /usr/bin/mpp_monitor.py

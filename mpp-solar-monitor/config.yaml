@@ -1,0 +1,37 @@
+name: MPP Solar Monitor
+version: "1.0.4"
+slug: mpp-solar-monitor
+description: Monitor MPP Solar inverters and publish data to Home Assistant via MQTT
+url: "https://github.com/9991119990/mpp-solar-addon-correct/tree/main/mpp-solar-monitor"
+arch:
+  - armhf
+  - armv7
+  - aarch64
+  - amd64
+  - i386
+init: false
+map:
+  - share:rw
+options:
+  device_path: "/dev/hidraw0"
+  protocol: "PI16"
+  baud_rate: 2400
+  mqtt_host: "core-mosquitto"
+  mqtt_port: 1883
+  mqtt_username: ""
+  mqtt_password: ""
+  device_name: "MPP Solar Inverter"
+  scan_interval: 30
+  debug: false
+schema:
+  device_path: "str"
+  protocol: "list(PI16|PI30|PI18)?"
+  baud_rate: "int(1200,115200)?"
+  mqtt_host: "str"
+  mqtt_port: "port?"
+  mqtt_username: "str?"
+  mqtt_password: "password?"
+  device_name: "str?"
+  scan_interval: "int(10,300)?"
+  debug: "bool?"
+image: "ghcr.io/home-assistant/{arch}-addon-mpp-solar-monitor"

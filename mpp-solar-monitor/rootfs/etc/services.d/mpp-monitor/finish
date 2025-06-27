@@ -1,0 +1,12 @@
+#!/usr/bin/with-contenv bashio
+# ==============================================================================
+# Home Assistant Community Add-on: MPP Solar Monitor
+# Take down the S6 supervision tree when the monitor fails
+# ==============================================================================
+
+bashio::log.info "MPP Solar Monitor stopped"
+
+if [[ "$1" -ne 0 ]] && [[ "$1" -ne 256 ]]; then
+  bashio::log.warning "MPP Solar Monitor crashed with exit code ${1}"
+  bashio::log.warning "Please check the configuration and try again"
+fi
