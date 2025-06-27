@@ -1,27 +1,21 @@
 ARG BUILD_FROM
 FROM $BUILD_FROM
 
-# Set shell
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+# Install system packages
+RUN apk add --no-cache \
+    python3 \
+    py3-pip \
+    py3-setuptools \
+    python3-dev \
+    build-base \
+    linux-headers \
+    git
 
-# Install packages
-RUN \
-    apk add --no-cache \
-        python3 \
-        py3-pip \
-        py3-setuptools \
-        py3-wheel \
-        python3-dev \
-        build-base \
-        linux-headers \
-        libusb-dev \
-        eudev-dev
-
-# Install Python packages
-RUN pip3 install --no-cache-dir \
-    pyserial \
-    paho-mqtt \
-    mpp-solar
+# Upgrade pip and install packages step by step
+RUN pip3 install --upgrade pip
+RUN pip3 install pyserial
+RUN pip3 install paho-mqtt  
+RUN pip3 install mpp-solar
 
 # Copy root filesystem
 COPY rootfs /

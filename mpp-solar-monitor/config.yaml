@@ -1,5 +1,5 @@
 name: MPP Solar Monitor
-version: "1.0.6"
+version: "1.0.7"
 slug: mpp-solar-monitor
 description: Monitor MPP Solar inverters and publish data to Home Assistant via MQTT
 url: "https://github.com/9991119990/mpp-solar-addon-correct/tree/main/mpp-solar-monitor"
