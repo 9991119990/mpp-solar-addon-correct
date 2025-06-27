@@ -1,5 +1,5 @@
 name: MPP Solar Monitor
-version: "1.0.4"
+version: "1.0.5"
 slug: mpp-solar-monitor
 description: Monitor MPP Solar inverters and publish data to Home Assistant via MQTT
 url: "https://github.com/9991119990/mpp-solar-addon-correct/tree/main/mpp-solar-monitor"
@@ -12,6 +12,16 @@ arch:
 init: false
 map:
   - share:rw
+  - config:rw
+devices:
+  - /dev/hidraw0
+  - /dev/hidraw1
+  - /dev/ttyUSB0
+  - /dev/ttyUSB1
+  - /dev/ttyAMA0
+privileged:
+  - SYS_RAWIO
+uart: true
 options:
   device_path: "/dev/hidraw0"
   protocol: "PI16"
@@ -34,4 +44,3 @@ schema:
   device_name: "str?"
   scan_interval: "int(10,300)?"
   debug: "bool?"
-image: "ghcr.io/home-assistant/{arch}-addon-mpp-solar-monitor"
