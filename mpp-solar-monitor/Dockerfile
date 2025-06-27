@@ -9,13 +9,16 @@ RUN apk add --no-cache \
     python3-dev \
     build-base \
     linux-headers \
-    git
+    git \
+    gcc \
+    musl-dev
 
-# Upgrade pip and install packages step by step
-RUN pip3 install --upgrade pip
-RUN pip3 install pyserial
-RUN pip3 install paho-mqtt  
-RUN pip3 install mpp-solar
+# Upgrade pip and install basic packages
+RUN pip3 install --upgrade pip setuptools wheel
+RUN pip3 install pyserial paho-mqtt
+
+# Install mpp-solar from git (more reliable)
+RUN pip3 install git+https://github.com/jblance/mpp-solar.git
 
 # Copy root filesystem
 COPY rootfs /
