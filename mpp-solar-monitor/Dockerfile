@@ -7,21 +7,21 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # Install packages
 RUN \
     apk add --no-cache \
-        python3=~3.11 \
-        py3-pip=~23.1 \
-        py3-setuptools=~67.6 \
-        py3-wheel=~0.40 \
-        python3-dev=~3.11 \
-        build-base=~0.5 \
-        linux-headers=~6.3 \
-        libusb-dev=~1.0 \
-        eudev-dev=~3.2
+        python3 \
+        py3-pip \
+        py3-setuptools \
+        py3-wheel \
+        python3-dev \
+        build-base \
+        linux-headers \
+        libusb-dev \
+        eudev-dev
 
 # Install Python packages
 RUN pip3 install --no-cache-dir \
-    pyserial==3.5 \
-    paho-mqtt==1.6.1 \
-    mpp-solar==0.15.50
+    pyserial \
+    paho-mqtt \
+    mpp-solar
 
 # Copy root filesystem
 COPY rootfs /
