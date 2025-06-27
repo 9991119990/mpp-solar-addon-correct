@@ -175,22 +175,56 @@ class MPPSolarMonitor:
     def get_inverter_data(self):
         """Get data from inverter using mpp-solar"""
         try:
-            cmd = ['mpp-solar', '-p', self.device_path, '-P', self.protocol, '-c', 'QPIGS']
+            # Try different output formats
+            for output_format in ['-o', 'json', '-o', 'table', None]:
+                cmd = ['mpp-solar', '-p', self.device_path, '-P', self.protocol, '-c', 'QPIGS']
+                
+                # Add baud rate for serial devices
+                if self.device_path.startswith('/dev/ttyUSB'):
+                    cmd.extend(['-b', self.baud_rate])
+                
+                # Add output format if specified
+                if output_format:
+                    cmd.extend([output_format])
+                
+                self.logger.debug(f"Running command: {' '.join(cmd)}")
+                
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+                
+                if result.returncode == 0:
+                    self.logger.info(f"Command output (format={output_format or 'default'}): {result.stdout}")
+                    
+                    # Try JSON format first
+                    if output_format == 'json':
+                        try:
+                            json_data = json.loads(result.stdout)
+                            if json_data and isinstance(json_data, dict):
+                                self.logger.info(f"✅ Got JSON data: {len(json_data)} fields")
+                                return json_data
+                        except json.JSONDecodeError:
+                            self.logger.debug("JSON parsing failed, trying next format")
+                            continue
+                    
+                    # Parse table/default format
+                    parsed_data = self.parse_mpp_output(result.stdout)
+                    if parsed_data and len(parsed_data) > 1:  # More than just grid_voltage
+                        self.logger.info(f"✅ Got parsed data: {len(parsed_data)} fields")
+                        return parsed_data
+                    
+                    self.logger.warning(f"Format {output_format or 'default'} returned limited data: {parsed_data}")
+                else:
+                    self.logger.error(f"Command failed (rc={result.returncode}): {result.stderr}")
             
-            # Add baud rate for serial devices
-            if self.device_path.startswith('/dev/ttyUSB'):
-                cmd.extend(['-b', self.baud_rate])
+            # If all formats failed, try alternative protocols
+            if self.protocol != 'PI18':
+                self.logger.warning("QPIGS failed, trying PI18 protocol...")
+                data = self.try_alternative_protocol('PI18')
+                if data:
+                    return data
             
-            self.logger.debug(f"Running command: {' '.join(cmd)}")
-            
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
-            
-            if result.returncode == 0:
-                self.logger.debug(f"Command output: {result.stdout}")
-                return self.parse_mpp_output(result.stdout)
-            else:
-                self.logger.error(f"Command failed (rc={result.returncode}): {result.stderr}")
-                return None
+            # If still no luck, try alternative commands
+            self.logger.warning("QPIGS failed, trying alternative commands...")
+            return self.try_alternative_commands()
                 
         except subprocess.TimeoutExpired:
             self.logger.error("Command timed out")
@@ -198,6 +232,71 @@ class MPPSolarMonitor:
         except Exception as e:
             self.logger.error(f"Error getting inverter data: {e}")
             return None
+    
+    def try_alternative_protocol(self, alt_protocol):
+        """Try alternative protocol for QPIGS command"""
+        try:
+            cmd = ['mpp-solar', '-p', self.device_path, '-P', alt_protocol, '-c', 'QPIGS', '-o', 'json']
+            
+            if self.device_path.startswith('/dev/ttyUSB'):
+                cmd.extend(['-b', self.baud_rate])
+            
+            self.logger.info(f"Trying protocol {alt_protocol}: {' '.join(cmd)}")
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            
+            if result.returncode == 0:
+                self.logger.info(f"Protocol {alt_protocol} output: {result.stdout}")
+                
+                try:
+                    json_data = json.loads(result.stdout)
+                    if json_data and isinstance(json_data, dict) and len(json_data) > 1:
+                        self.logger.info(f"✅ Protocol {alt_protocol} works! Got {len(json_data)} fields")
+                        # Update protocol for future calls
+                        self.protocol = alt_protocol
+                        return json_data
+                except json.JSONDecodeError:
+                    pass
+                    
+                # Try parsing as table format
+                data = self.parse_mpp_output(result.stdout)
+                if data and len(data) > 1:
+                    self.logger.info(f"✅ Protocol {alt_protocol} works! Got {len(data)} fields")
+                    self.protocol = alt_protocol
+                    return data
+            else:
+                self.logger.debug(f"Protocol {alt_protocol} failed: {result.stderr}")
+                
+        except Exception as e:
+            self.logger.debug(f"Protocol {alt_protocol} error: {e}")
+        
+        return None
+    
+    def try_alternative_commands(self):
+        """Try alternative commands if QPIGS fails"""
+        alternative_commands = ['QPIRI', 'QPIGs', 'QPI', 'QMN', 'QGMN']
+        
+        for cmd_name in alternative_commands:
+            try:
+                cmd = ['mpp-solar', '-p', self.device_path, '-P', self.protocol, '-c', cmd_name]
+                
+                if self.device_path.startswith('/dev/ttyUSB'):
+                    cmd.extend(['-b', self.baud_rate])
+                
+                self.logger.debug(f"Trying alternative command: {' '.join(cmd)}")
+                
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+                
+                if result.returncode == 0 and result.stdout.strip():
+                    self.logger.info(f"Alternative command {cmd_name} output: {result.stdout}")
+                    data = self.parse_mpp_output(result.stdout)
+                    if data:
+                        return data
+                        
+            except Exception as e:
+                self.logger.debug(f"Alternative command {cmd_name} failed: {e}")
+        
+        return None
 
     def parse_mpp_output(self, output):
         """Parse mpp-solar output into structured data"""
@@ -251,24 +350,53 @@ class MPPSolarMonitor:
         
         published_count = 0
         
-        for sensor_key in self.sensors.keys():
-            if sensor_key in data:
-                value = data[sensor_key]
-                topic = f"{self.base_topic}/{sensor_key}/state"
+        # If data is from JSON, try direct mapping first
+        if isinstance(data, dict):
+            # Try to find matching sensors with flexible key matching
+            for sensor_key in self.sensors.keys():
+                value = None
                 
-                try:
-                    self.mqtt_client.publish(topic, str(value))
-                    published_count += 1
-                    self.logger.debug(f"Published {sensor_key}: {value}")
-                except Exception as e:
-                    self.logger.error(f"Failed to publish {sensor_key}: {e}")
+                # Direct match
+                if sensor_key in data:
+                    value = data[sensor_key]
+                else:
+                    # Try flexible matching for mpp-solar JSON output
+                    for data_key, data_value in data.items():
+                        # Normalize both keys for comparison
+                        norm_sensor = sensor_key.lower().replace('_', '').replace('-', '')
+                        norm_data = data_key.lower().replace('_', '').replace('-', '').replace(' ', '')
+                        
+                        if norm_sensor in norm_data or norm_data in norm_sensor:
+                            value = data_value
+                            self.logger.debug(f"Mapped {data_key} -> {sensor_key}")
+                            break
+                
+                if value is not None:
+                    topic = f"{self.base_topic}/{sensor_key}/state"
+                    
+                    try:
+                        # Ensure value is numeric
+                        if isinstance(value, (int, float)):
+                            self.mqtt_client.publish(topic, str(value))
+                            published_count += 1
+                            self.logger.debug(f"Published {sensor_key}: {value}")
+                        elif isinstance(value, str):
+                            try:
+                                numeric_value = float(value)
+                                self.mqtt_client.publish(topic, str(numeric_value))
+                                published_count += 1
+                                self.logger.debug(f"Published {sensor_key}: {numeric_value}")
+                            except ValueError:
+                                self.logger.debug(f"Skipped non-numeric value {sensor_key}: {value}")
+                    except Exception as e:
+                        self.logger.error(f"Failed to publish {sensor_key}: {e}")
         
         if published_count > 0:
             self.logger.info(f"📊 Published {published_count} sensor values")
         else:
             self.logger.warning("No sensor data published - check sensor mappings")
             if self.debug:
-                self.logger.debug(f"Available data: {list(data.keys())}")
+                self.logger.debug(f"Available data keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
                 self.logger.debug(f"Expected sensors: {list(self.sensors.keys())}")
 
     def run(self):
